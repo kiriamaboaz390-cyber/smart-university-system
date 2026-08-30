@@ -22,6 +22,19 @@ const timetable = [
   { day: "Thu", time: "15:00 - 17:00", course: "ENG110", room: "R-118", lecturer: "Mr. Otieno" },
 ];
 
+const roomAvailability = [
+  { room: "R-101", status: "Booked", window: "09:00 - 11:00" },
+  { room: "R-102", status: "Available", window: "Free now" },
+  { room: "R-103", status: "Available", window: "Free now" },
+  { room: "R-204", status: "Occupied", window: "09:00 - 11:00" },
+];
+
+const examSlots = [
+  { course: "CS101", date: "2026-09-12", room: "R-204", status: "Scheduled" },
+  { course: "BUS202", date: "2026-09-13", room: "R-101", status: "Scheduled" },
+  { course: "MTH210", date: "2026-09-14", room: "R-305", status: "Conflict check" },
+];
+
 export default function Home() {
   return (
     <main className="page-shell">
@@ -104,6 +117,52 @@ export default function Home() {
         </div>
 
         <QRAttendancePanel />
+      </section>
+
+      <section className="feature-grid">
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow">Room allocation</p>
+              <h3>Available and occupied rooms</h3>
+            </div>
+            <span className="status-pill info">Live</span>
+          </div>
+
+          <div className="mini-list">
+            {roomAvailability.map((room) => (
+              <div className="mini-item" key={room.room}>
+                <div>
+                  <strong>{room.room}</strong>
+                  <span>{room.window}</span>
+                </div>
+                <span className={room.status === "Available" ? "tag success" : "tag warning"}>{room.status}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow">Exam scheduling</p>
+              <h3>Exam timetable preview</h3>
+            </div>
+            <span className="status-pill success">Validated</span>
+          </div>
+
+          <div className="mini-list">
+            {examSlots.map((slot) => (
+              <div className="mini-item" key={slot.course}>
+                <div>
+                  <strong>{slot.course}</strong>
+                  <span>{slot.date} · {slot.room}</span>
+                </div>
+                <span className="tag neutral">{slot.status}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
     </main>
   );
