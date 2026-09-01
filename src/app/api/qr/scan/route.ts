@@ -15,6 +15,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { payload, studentId, action } = body;
+    const user = getUserFromAuthHeader(req.headers.get("authorization") ?? undefined);
     if (!payload) return NextResponse.json({ error: "missing_payload" }, { status: 400 });
 
     const parsed = parsePayload(payload.replace(/^smart-university:/, ""));
@@ -25,6 +26,8 @@ export async function POST(req: Request) {
     if (!session) return NextResponse.json({ error: "session_not_found" }, { status: 404 });
 
     if (action === "start") {
+      // only lecturers can start sessions
+      if (!hasRole(user, ["LECTURER"])) return NextResponse.json({ error: "forbidden" }, { status: 403 });
       // mark room occupied and create audit log
       if (session.roomId) {
         await prisma.room.update({ where: { id: session.roomId }, data: { status: "OCCUPIED" } });

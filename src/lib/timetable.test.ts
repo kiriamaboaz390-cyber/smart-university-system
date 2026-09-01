@@ -43,6 +43,30 @@ test("builds a valid semester timetable without lecturer or room conflicts", () 
   assert.equal(timetable.every((entry) => entry.day && entry.start >= 8 && entry.end <= 18), true);
 });
 
+test("enforces 2-hour slots within business hours (07:00-19:00)", () => {
+  const courses = [
+    { id: "CS201", lecturerId: "lect-1", studentIds: ["s1"], duration: 2 },
+    { id: "CS202", lecturerId: "lect-2", studentIds: ["s2"], duration: 2 },
+  ];
+
+  const timetable = generateSemesterTimetable(courses, ["R-201", "R-202"]);
+  const allowedStarts = [7, 9, 11, 13, 15, 17];
+  assert.equal(timetable.every((e) => allowedStarts.includes(e.start) && e.end - e.start === 2), true);
+});
+
+test("selects rooms respecting capacity when room objects provided", () => {
+  const courses = [
+    { id: "CS301", lecturerId: "lect-1", studentIds: new Array(100).fill(0).map((_, i) => `s${i}`), duration: 2 },
+    { id: "CS302", lecturerId: "lect-2", studentIds: new Array(30).fill(0).map((_, i) => `s${i}`), duration: 2 },
+  ];
+
+  const rooms = [ { id: "R-Large", capacity: 120 }, { id: "R-Small", capacity: 40 } ];
+  const timetable = generateSemesterTimetable(courses as any, rooms as any);
+
+  assert.equal(timetable[0].roomId === "R-Large", true);
+  assert.equal(timetable[1].roomId === "R-Small", true);
+});
+
 test("creates exam slots while preserving room and lecturer availability", () => {
   const exams = [
     { id: "E-1", lecturerId: "lect-1", roomId: "R-101", day: "Wed", start: 9, end: 11 },

@@ -53,7 +53,7 @@ function runTimetableTests() {
   const timetable = generateSemesterTimetable(courses as any, ["R-101", "R-102", "R-103"]);
   assert.equal(timetable.length, 3);
   assert.equal(timetable.some((entry) => entry.roomId === "R-101"), true);
-  assert.equal(timetable.every((entry) => entry.day && entry.start >= 8 && entry.end <= 18), true);
+  assert.equal(timetable.every((entry) => entry.day && entry.start >= 7 && entry.end <= 19), true);
 
   const exams = [
     { id: "E-1", lecturerId: "lect-1", roomId: "R-101", day: "Wed", start: 9, end: 11 },

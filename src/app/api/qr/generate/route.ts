@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getUserFromAuthHeader, hasRole } from "@/lib/rbac";
 
 export async function POST(req: Request) {
   try {
+    const user = getUserFromAuthHeader(req.headers.get("authorization") ?? undefined);
+    if (!hasRole(user, ["SUPER_ADMIN", "ADMIN"])) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+
     const { sessionId } = await req.json();
     if (!sessionId) return NextResponse.json({ error: "missing_sessionId" }, { status: 400 });
 

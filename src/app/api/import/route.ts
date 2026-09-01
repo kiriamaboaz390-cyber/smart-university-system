@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getUserFromAuthHeader, hasRole } from "@/lib/rbac";
 
 function parseCsv(csv: string) {
   const lines = csv.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -153,6 +154,11 @@ async function importSessions(rows: Record<string, string>[]) {
 
 export async function POST(req: Request) {
   try {
+    const user = getUserFromAuthHeader(req.headers.get("authorization") ?? undefined);
+    if (!hasRole(user, ["SUPER_ADMIN", "HR_ADMIN"])) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+
     const body = await req.json();
     const { type, csv } = body;
     if (!type || !csv) return NextResponse.json({ error: "missing_type_or_csv" }, { status: 400 });
