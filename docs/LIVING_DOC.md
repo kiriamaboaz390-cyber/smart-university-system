@@ -106,3 +106,75 @@ The prototype uses a practical rule set:
 - 2026-08-30: TDD workflow started with failing scheduling tests
 
 This document should be updated whenever architecture, constraints, or implementation status changes.
+
+## 9. Action plan, open questions, hard constraints, and commit pattern
+
+### 9.1 Immediate open questions (please answer these)
+- Q1: Do you want email/password auth only for MVP, or also invite-based onboarding for staff? (Recommended: both, start with email/password + invite)
+- Q2: For CSV imports, which CSVs must be supported first? (Users, Students, Lecturers, Rooms, Courses, Sessions — pick mandatory subset)
+- Q3: Acceptable business hours and time resolution? (e.g., 07:00–20:00, slots in 30-minute increments)
+- Q4: Room capacity enforcement — strictly enforced or advisory for automated allocation?
+- Q5: Audit retention policy for attendance and logs (e.g., 1 year, 5 years, indefinite)?
+- Q6: Do lecturers need the ability to manually mark attendance in addition to QR scans?
+- Q7: Do you prefer optimistic or pessimistic locking for concurrent room allocations? (optimistic with conflict detection recommended)
+
+### 9.2 Additional clarifying questions (optional but helpful)
+- Q8: Preferred time zone handling — store UTC and present in local campus timezone? (recommended)
+- Q9: Any third-party calendar integrations (Google Calendar, Outlook) required initially?
+- Q10: Should students see only their enrolled sessions or the full course schedule?
+
+### 9.3 Hard constraints (things we will NOT do) and rationale
+- No secrets or credentials in the repository — prevents accidental leaks and enforces secure deployment.
+- No destructive DB migrations without explicit approval and a migration plan — prevents data loss during development.
+- No native mobile app for MVP — single web/PWA QR experience is sufficient and faster to deliver.
+- No direct production deployment or cloud credential changes without your approval — ensures control over production.
+
+### 9.4 Coding and process principles (TDD + complementary principles)
+- Test-Driven Development (TDD): write unit and integration tests before implementing features; maintain a failing->passing workflow.
+- Type safety & linting: strict TypeScript checks, `tsconfig` strict mode, and `eslint` enforced in CI.
+- Modular services: separate modules for `auth`, `rooms`, `timetable`, `attendance`, `csv-import`, and `audit`.
+- Single source of truth: `Prisma` schema as canonical model; migrations via Prisma Migrate.
+- RBAC middleware: centralize authorization checks via a middleware layer used by API routes and server components.
+- CI automation: tests, lint, and migration checks run on every PR.
+- Incremental delivery: ship small vertical slices (API, DB, UI) with tests per slice.
+
+### 9.5 Execution plan (systematic, parallel tracks)
+We will run parallel tracks that converge each sprint (2-week cadence):
+
+- Track A — Core infra & auth
+   1. Set up Postgres dev instance and Prisma migrations skeleton.
+   2. Implement simple email/password auth + invite flow and RBAC scaffolding.
+   3. Add `User`, `LecturerProfile`, `StudentProfile` CRUD APIs and CSV import endpoints.
+
+- Track B — Room allocation & QR attendance
+   1. Implement room CRUD and availability API (`findAvailableRooms` exists; add persistence).
+   2. Implement QR generator for sessions and server-side QR validation endpoint.
+   3. Implement attendance recording with audit logs and concurrency checks.
+
+- Track C — Timetabling engine
+   1. Expand `src/lib/timetable.ts` with constraint rules (capacity, contiguous slots, student conflicts).
+   2. Add exam timetable generator that respects multi-day exam windows and lecturer constraints.
+   3. Provide API endpoints for generating and validating suggested timetables.
+
+- Track D — UI and role-based flows
+   1. Add pages for SuperAdmin/HR/Admin/Lecturer/Student shells.
+   2. Integrate QR scan UI using browser camera (WebRTC) and QR payload validation.
+   3. Add timetable visualizer with drag/drop (future) and conflict highlighting.
+
+Each sprint we will merge one small vertical slice from these tracks, run tests, and update this document.
+
+### 9.6 Commit and branching pattern (enforced via CI)
+- Branching: `main` protected, `develop` for daily integration, feature branches `feature/<short-desc>` off `develop`.
+- Commits: atomic and scoped; use Conventional Commits format: `feat:`, `fix:`, `chore:`, `docs:`, `test:`. Example: `feat(timetable): add semester slot generator`.
+- PRs: open PRs from `feature/*` to `develop` with linked ticket and at least one reviewer. Include test results and a short manual QA checklist.
+- Reviews: require 1 review and passing CI (tests + lint) before merge.
+- Releases: `main` receives release merges from `develop` only; tags follow `vMAJOR.MINOR.PATCH`.
+- Enforce via CI: `pre-merge` checks for lint, tests, schema drift, and commit message linting.
+
+### 9.7 Next immediate actions (I'll perform after your answers)
+1. Run the test suite and report failures.  
+2. Add a baseline `auth` scaffold (email/password + invite) and RBAC middleware.  
+3. Persist `findAvailableRooms` to Prisma and implement CSV import endpoints for `rooms` and `users`.  
+4. Implement QR generation endpoint and a simple scanner page that writes `AttendanceRecord` entries.  
+5. Extend `src/lib/timetable.ts` with more constraints and add tests.
+

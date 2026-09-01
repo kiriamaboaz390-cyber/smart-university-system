@@ -1,0 +1,2 @@
+courseCode,lecturerEmail,roomCode,day,startTime,endTime,type
+CS101,bob.lecturer@example.edu,R-204,Mon,9,11,LECTURE
