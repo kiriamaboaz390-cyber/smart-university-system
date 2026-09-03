@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getUserFromAuthHeader, hasRole } from "@/lib/rbac";
 
 function parsePayload(payload: string) {
   // expected format: key=val;key=val
@@ -11,7 +12,7 @@ function parsePayload(payload: string) {
   return obj;
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { payload, studentId, action } = body;

@@ -7,24 +7,28 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Enums replaced with string fields for SQLite local development.
-// Allowed values are documented in `docs/LIVING_DOC.md` and validated at the application layer.
+// String fields used instead of enums for SQLite compatibility during local development.
+// In production (Postgres), these can be converted to proper enums.
 
 model User {
   id          String   @id @default(cuid())
   email       String   @unique
   firstName   String
   lastName    String
-  role        String   @default("STUDENT")
+  role        String   @default("STUDENT") // SUPER_ADMIN, HR_ADMIN, ADMIN, LECTURER, STUDENT
   status      String   @default("ACTIVE")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  authCredential AuthCredential?
+  lecturer    LecturerProfile?
+  student     StudentProfile?
   sessions    Session[]
   attendance  AttendanceRecord[]
   auditLogs   AuditLog[]
-  lecturer    LecturerProfile?
-  student     StudentProfile?
-  authCredential AuthCredential?
+  approvals   ScheduleChangeRequest[] @relation("approver")
+  overrideRequests OverrideApprovalRequest[]
+  notifications Notification[]
 }
 
 model AuthCredential {
@@ -32,34 +36,18 @@ model AuthCredential {
   userId       String   @unique
   passwordHash String
   createdAt    DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id])
-}
-
-model LecturerProfile {
-  id          String @id @default(cuid())
-  userId      String @unique
-  title       String?
-  department  String?
-  user        User   @relation(fields: [userId], references: [id])
-  sessions    Session[]
-}
-
-model StudentProfile {
-  id          String @id @default(cuid())
-  userId      String @unique
-  studentCode String @unique
-  yearLevel   Int
-  programme   String
-  user        User   @relation(fields: [userId], references: [id])
+  user         User     @relation(fields: [userId], references: [id])
 }
 
 model Campus {
-  id        String    @id @default(cuid())
-  name      String
-  code      String    @unique
-  buildings Building[]
-  createdAt DateTime  @default(now())
+  id          String    @id @default(cuid())
+  name        String
+  code        String    @unique
+  timezone    String    @default("UTC") // e.g., "Africa/Nairobi"
+  createdAt   DateTime  @default(now())
+
+  buildings   Building[]
+  termConfigs TermConfig[]
 }
 
 model Building {
@@ -67,6 +55,8 @@ model Building {
   campusId  String
   name      String
   code      String  @unique
+  createdAt DateTime @default(now())
+
   campus    Campus  @relation(fields: [campusId], references: [id])
   rooms     Room[]
 }
@@ -78,28 +68,48 @@ model Room {
   code      String   @unique
   capacity  Int
   status    String   @default("AVAILABLE")
-  equipment String?  // comma-separated labels like "projector,lab-bench"
+  equipment String?  // comma-separated: "Projector,Lab Benches"
+  createdAt DateTime @default(now())
+
   building  Building @relation(fields: [buildingId], references: [id])
   sessions  Session[]
 }
 
 model StudentGroup {
-  id        String @id @default(cuid())
-  programme String
-  year      Int
-  name      String
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  programme    String   // e.g., "Computer Science"
+  yearLevel    Int      // e.g., 1, 2, 3, 4
+  name         String   // e.g., "CS Year 2 Group A"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  students     StudentProfile[]
+  courses      Course[]
 }
 
-model TermConfig {
-  id        String   @id @default(cuid())
-  name      String
-  startDate DateTime
-  endDate   DateTime
-  examStart DateTime?
-  examEnd   DateTime?
-  campusId  String?
-  createdAt DateTime @default(now())
+model StudentProfile {
+  id          String @id @default(cuid())
+  userId      String @unique
+  studentCode String @unique
+  yearLevel   Int
+  programme   String
+  groupId     String?
+  createdAt   DateTime @default(now())
+
+  user        User   @relation(fields: [userId], references: [id])
+  group       StudentGroup? @relation(fields: [groupId], references: [id])
+}
+
+model LecturerProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  title       String?
+  department  String?
+  createdAt   DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id])
+  sessions        Session[]
+  changeRequests  ScheduleChangeRequest[]
 }
 
 model Course {
@@ -108,37 +118,83 @@ model Course {
   title       String
   credits     Int
   department  String
+  groupId     String?
+  createdAt   DateTime @default(now())
+
+  group       StudentGroup? @relation(fields: [groupId], references: [id])
   sessions    Session[]
   examSlots   ExamSchedule[]
 }
 
 model Session {
-  id          String          @id @default(cuid())
+  id          String   @id @default(cuid())
   courseId    String
   lecturerId  String
   roomId      String
-  day         String
-  startTime   Int
-  endTime     Int
-  type        String          @default("LECTURE")
-  createdAt   DateTime        @default(now())
-  course      Course          @relation(fields: [courseId], references: [id])
-  lecturer    LecturerProfile @relation(fields: [lecturerId], references: [id])
-  room        Room            @relation(fields: [roomId], references: [id])
-  attendance  AttendanceRecord[]
-  user        User?           @relation(fields: [userId], references: [id])
-  userId      String?
+  day         String   // Mon, Tue, Wed, Thu, Fri
+  startTime   Int      // hour (7–19)
+  endTime     Int      // hour (startTime + 2)
+  type        String   @default("LECTURE") // LECTURE, TUTORIAL, LAB, SEMINAR, EXAM
+  createdAt   DateTime @default(now())
+
+  course              Course    @relation(fields: [courseId], references: [id])
+  lecturer            LecturerProfile @relation(fields: [lecturerId], references: [id])
+  room                Room      @relation(fields: [roomId], references: [id])
+  attendance          AttendanceRecord[]
+  changeRequests      ScheduleChangeRequest[]
+  user                User?     @relation(fields: [userId], references: [id])
+  userId              String?
 }
 
 model AttendanceRecord {
-  id          String            @id @default(cuid())
+  id          String   @id @default(cuid())
   sessionId   String
   studentId   String
-  status      String            @default("PRESENT")
+  status      String   @default("PRESENT") // PRESENT, LATE, ABSENT, EXCUSED
   scannedAt   DateTime?
-  createdAt   DateTime          @default(now())
-  session     Session           @relation(fields: [sessionId], references: [id])
-  student     User              @relation(fields: [studentId], references: [id])
+  createdAt   DateTime @default(now())
+
+  session     Session  @relation(fields: [sessionId], references: [id])
+  student     User     @relation(fields: [studentId], references: [id])
+}
+
+model TermConfig {
+  id                  String   @id @default(cuid())
+  campusId            String
+  termName            String   // e.g., "Spring 2026"
+  startDate           DateTime
+  endDate             DateTime
+  businessHourStart   Int      @default(7)  // 07:00
+  businessHourEnd     Int      @default(19) // 19:00
+  maxSessionsPerWeek  Int      @default(18)
+  maxUnitsPerSemester Int      @default(8)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  campus              Campus   @relation(fields: [campusId], references: [id])
+  examWindows         ExamWindow[]
+  holidays            Holiday[]
+}
+
+model ExamWindow {
+  id            String   @id @default(cuid())
+  termConfigId  String
+  examStartDate DateTime
+  examEndDate   DateTime
+  createdAt     DateTime @default(now())
+
+  termConfig    TermConfig @relation(fields: [termConfigId], references: [id])
+}
+
+model Holiday {
+  id           String   @id @default(cuid())
+  termConfigId String
+  date         DateTime // single day or start of range
+  endDate      DateTime? // optional end if multi-day holiday
+  name         String   // e.g., "Christmas Break"
+  createdAt    DateTime @default(now())
+
+  termConfig   TermConfig @relation(fields: [termConfigId], references: [id])
 }
 
 model ExamSchedule {
@@ -149,48 +205,45 @@ model ExamSchedule {
   startTime   Int
   endTime     Int
   createdAt   DateTime @default(now())
+
   course      Course   @relation(fields: [courseId], references: [id])
 }
 
-model AuditLog {
-  id          String   @id @default(cuid())
-  actorId     String?
-  actor       User?    @relation(fields: [actorId], references: [id])
-  action      String
-  entityType  String
-  entityId    String
-  details     String?
-  createdAt   DateTime @default(now())
+model ScheduleChangeRequest {
+  id                  String   @id @default(cuid())
+  sessionId           String
+  lecturerId          String
+  requestType         String   // "room_change" or "time_change"
+  proposedRoomId      String?
+  proposedStartTime   Int?
+  proposedEndTime     Int?
+  proposedDay         String?
+  status              String   @default("PENDING") // PENDING, APPROVED, REJECTED, AUTO_APPROVED
+  reason              String?
+  approvedBy          String?
+  approvedAt          DateTime?
+  requiresManualApproval Boolean @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  session             Session  @relation(fields: [sessionId], references: [id])
+  lecturer            LecturerProfile @relation(fields: [lecturerId], references: [id])
+  approver            User?    @relation("approver", fields: [approvedBy], references: [id])
 }
 
-model StudentGroupMembership {
-  id          String   @id @default(cuid())
-  studentId   String   @unique
-  groupId     String
-  createdAt   DateTime @default(now())
-  student     User     @relation(fields: [studentId], references: [id])
-}
+model OverrideApprovalRequest {
+  id                          String   @id @default(cuid())
+  superAdminId                String
+  proposedChangeDescription   String
+  status                      String   @default("PENDING") // PENDING, APPROVED, REJECTED, AUTO_APPROVED
+  hrDecision                  String?  // reason for approval or rejection
+  hrRespondedAt               DateTime?
+  autoApprovedAt              DateTime?
+  autoApprovalReason          String   @default("No response from Human Resource")
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
 
-model ChangeRequest {
-  id            String   @id @default(cuid())
-  sessionId     String
-  lecturerId    String
-  requestedBy   String
-  currentRoomId String?
-  newRoomId     String?
-  currentDay    String?
-  newDay        String?
-  currentStart  Int?
-  newStart      Int?
-  currentEnd    Int?
-  newEnd        Int?
-  reason        String?
-  status        String   @default("PENDING") // PENDING, AUTO_APPROVED, APPROVED, REJECTED, TIMEOUT
-  approvedBy    String?
-  approvalReason String?
-  approvalAt    DateTime?
-  createdAt     DateTime @default(now())
-  expiresAt     DateTime // 48 hour timeout for SuperAdmin overrides
+  superAdmin                  User     @relation(fields: [superAdminId], references: [id])
 }
 
 model Notification {
@@ -202,5 +255,18 @@ model Notification {
   relatedId String?  // session, change request, etc.
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
+
   user      User     @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorId     String?
+  action      String
+  entityType  String
+  entityId    String
+  details     String?
+  createdAt   DateTime @default(now())
+
+  actor       User?    @relation(fields: [actorId], references: [id])
 }
