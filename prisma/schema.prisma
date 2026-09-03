@@ -78,8 +78,28 @@ model Room {
   code      String   @unique
   capacity  Int
   status    String   @default("AVAILABLE")
+  equipment String?  // comma-separated labels like "projector,lab-bench"
   building  Building @relation(fields: [buildingId], references: [id])
   sessions  Session[]
+}
+
+model StudentGroup {
+  id        String @id @default(cuid())
+  programme String
+  year      Int
+  name      String
+  createdAt DateTime @default(now())
+}
+
+model TermConfig {
+  id        String   @id @default(cuid())
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  examStart DateTime?
+  examEnd   DateTime?
+  campusId  String?
+  createdAt DateTime @default(now())
 }
 
 model Course {
@@ -141,4 +161,46 @@ model AuditLog {
   entityId    String
   details     String?
   createdAt   DateTime @default(now())
+}
+
+model StudentGroupMembership {
+  id          String   @id @default(cuid())
+  studentId   String   @unique
+  groupId     String
+  createdAt   DateTime @default(now())
+  student     User     @relation(fields: [studentId], references: [id])
+}
+
+model ChangeRequest {
+  id            String   @id @default(cuid())
+  sessionId     String
+  lecturerId    String
+  requestedBy   String
+  currentRoomId String?
+  newRoomId     String?
+  currentDay    String?
+  newDay        String?
+  currentStart  Int?
+  newStart      Int?
+  currentEnd    Int?
+  newEnd        Int?
+  reason        String?
+  status        String   @default("PENDING") // PENDING, AUTO_APPROVED, APPROVED, REJECTED, TIMEOUT
+  approvedBy    String?
+  approvalReason String?
+  approvalAt    DateTime?
+  createdAt     DateTime @default(now())
+  expiresAt     DateTime // 48 hour timeout for SuperAdmin overrides
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // SESSION_START, CHANGE_REQUEST, APPROVAL, OVERRIDE_GRANTED
+  title     String
+  message   String
+  relatedId String?  // session, change request, etc.
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 }

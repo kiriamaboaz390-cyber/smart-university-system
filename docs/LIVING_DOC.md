@@ -118,6 +118,22 @@ This document should be updated whenever architecture, constraints, or implement
 - Q6: Do lecturers need the ability to manually mark attendance in addition to QR scans?
 - Q7: Do you prefer optimistic or pessimistic locking for concurrent room allocations? (optimistic with conflict detection recommended)
 
+### 9.8 Answers provided by stakeholder
+- Timetable visualizer: combine calendar week view + Gantt timeline features (both).  
+- CSV imports: all templates mandatory; HR-managed user creation and groups required before student assignment.  
+- Student groups: defined by `programme + year`, editable only by HR.  
+- Term configuration: Admin UI should be built to set term start/end, holidays, and exam timelines.  
+- Lecturer change requests: auto-approve if no conflicts; require Admin approval if conflicts.  
+- Notifications: both in-app and email (SMTP details provided later).  
+- Overrides: SuperAdmin cannot unilaterally override immediately — must wait 48 hours for HR response; if no response, SuperAdmin may override and an audit entry noting "No response from Human Resource" is recorded.  
+- Exam timelines: configured as part of TermConfig by Admin.  
+- Rooms: capacity plus equipment labels; room naming tied to building.  
+- Timetable generation cadence: both on-demand and batch (nightly) supported.  
+- Timezone handling: store timestamps in UTC and display in campus-local timezone.  
+- Bulk change requests: HR Admin can upload CSVs of change requests for review.  
+- Accessibility: visualizer must be keyboard-navigable and screen-reader friendly.  
+- Single-person operation: Admin can create full semester timetable from CSVs and a guided form.
+
 ### 9.2 Additional clarifying questions (optional but helpful)
 - Q8: Preferred time zone handling — store UTC and present in local campus timezone? (recommended)
 - Q9: Any third-party calendar integrations (Google Calendar, Outlook) required initially?
@@ -178,3 +194,52 @@ Each sprint we will merge one small vertical slice from these tracks, run tests,
 4. Implement QR generation endpoint and a simple scanner page that writes `AttendanceRecord` entries.  
 5. Extend `src/lib/timetable.ts` with more constraints and add tests.
 
+
+## 10. Confirmed decisions on architecture and workflows (responses to 14 clarifying questions)
+
+### 10.1 UI and visualization
+- Timetable visualizer combines week calendar and Gantt timeline views with unified conflict highlighting.
+- Visualizer is keyboard-navigable and screen-reader friendly (WCAG 2.1 AA).
+- Lecturer drag/drop room/time changes initiate proposal workflow (auto-approve if no conflicts, require Admin approval if conflicts).
+
+### 10.2 User onboarding and roles
+- HR Admin form captures: name, email, role, department (minimum). Students must belong to pre-created group.
+- Student groups defined by programme+year, editable by HR Admin only after creation.
+- No self-registration except Student (HR Admin creates all staff); SuperAdmin creates the first HR Admin.
+- SuperAdmin can edit details, but role changes require HR Admin + SuperAdmin approval (48-hour timeout with auto-fallback).
+
+### 10.3 Scheduling constraints and term configuration
+- Business hours: 07:00–19:00, Mon–Fri only (configurable per campus in TermConfig).
+- Session slots: fixed 2-hour increments; students max 18 sessions/week; max 8 units/semester per group.
+- Term configuration built via Admin UI: term start/end dates, holiday blackout dates, exam windows per campus.
+- Exams are part of TermConfig; Admin sets exam timeline windows and room allocations per course.
+
+### 10.4 Change workflows and approvals
+- Lecturer-initiated room/time changes: auto-approve if no conflicts; require Admin approval if conflicts exist.
+- SuperAdmin overrides require HR approval workflow with 48-hour timeout. If HR declines, reason provided. If no response for 48h, auto-grant with "No response from Human Resource" reason.
+- HR Admin can bulk upload change requests via CSV for review.
+
+### 10.5 Notifications and audit
+- Notifications: in-app + email (SMTP credentials provided separately for production).
+- All changes logged in AuditLog with actor, timestamp, details, and retention policy of 1 year.
+- Approval workflow notifications sent to relevant roles (Admin, HR, SuperAdmin).
+
+### 10.6 Rooms and equipment
+- Rooms have capacity (enforced strictly) and equipment labels (e.g., "Projector, Lab Benches").
+- Room names include building prefix (e.g., "Main Building - R-204").
+- Rooms created via import CSV or admin UI with building/equipment assignment.
+
+### 10.7 Timetable generation performance
+- On-demand generation when Admin submits form or changes occur.
+- Nightly batch generation via cron (scheduling, conflict detection, exam allocation).
+- Optimistic locking prevents race conditions on concurrent allocation requests.
+
+### 10.8 Timezone handling and bulk operations
+- All timestamps stored in UTC; UI displays campus-local time based on user's campus.
+- HR Admin can upload CSV of change requests for bulk review before applying.
+
+### 10.9 Single-person workflow
+- One Admin user can create a full semester timetable from CSVs (courses, lecturers, students, rooms) and a guided form (term dates, constraints).
+- Guided form walks Admin through: import CSVs → set business hours → define holidays → set exam windows → generate timetable → review conflicts → approve.
+
+This document should be updated whenever architecture, constraints, or implementation status changes.
