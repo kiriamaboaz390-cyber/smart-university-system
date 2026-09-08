@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local sqlite databases (prisma dev databases are machine-local)
+prisma/*.db
+prisma/*.db-journal
+prisma/shadow-diff.db*
+

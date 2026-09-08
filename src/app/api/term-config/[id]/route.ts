@@ -6,8 +6,9 @@ interface Params {
   id: string;
 }
 
-export async function GET(req: NextRequest, { params }: { params: Params }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<Params> }) {
   try {
+    const { id } = await params;
     const authHeader = req.headers.get("authorization");
     const user = getUserFromAuthHeader(authHeader || undefined);
     if (!user) {
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
     }
 
     const termConfig = await prisma.termConfig.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         holidays: true,
         examWindows: true,
@@ -37,8 +38,9 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
   }
 }
 
-export async function PUT(req: NextRequest, { params }: { params: Params }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<Params> }) {
   try {
+    const { id } = await params;
     const authHeader = req.headers.get("authorization");
     const user = getUserFromAuthHeader(authHeader || undefined);
     if (!user) {
@@ -61,7 +63,7 @@ export async function PUT(req: NextRequest, { params }: { params: Params }) {
     } = body;
 
     const termConfig = await prisma.termConfig.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         ...(termName && { termName }),
         ...(startDate && { startDate: new Date(startDate) }),
@@ -84,8 +86,9 @@ export async function PUT(req: NextRequest, { params }: { params: Params }) {
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: Params }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<Params> }) {
   try {
+    const { id } = await params;
     const authHeader = req.headers.get("authorization");
     const user = getUserFromAuthHeader(authHeader || undefined);
     if (!user) {
@@ -97,7 +100,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Params }) {
     }
 
     await prisma.termConfig.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     return NextResponse.json({ success: true });

@@ -7,8 +7,9 @@ interface Params {
   id: string;
 }
 
-export async function GET(req: NextRequest, { params }: { params: Params }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<Params> }) {
   try {
+    const { id } = await params;
     const authHeader = req.headers.get("authorization");
     const user = getUserFromAuthHeader(authHeader || undefined);
     if (!user) {
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
     }
 
     const targetUser = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id },
       select: {
         id: true,
         email: true,
@@ -40,8 +41,9 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
   }
 }
 
-export async function PUT(req: NextRequest, { params }: { params: Params }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<Params> }) {
   try {
+    const { id } = await params;
     const authHeader = req.headers.get("authorization");
     const user = getUserFromAuthHeader(authHeader || undefined);
     if (!user) {
@@ -60,7 +62,7 @@ export async function PUT(req: NextRequest, { params }: { params: Params }) {
     if (role) updateData.role = role;
 
     const updatedUser = await prisma.user.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       select: {
         id: true,
@@ -74,7 +76,7 @@ export async function PUT(req: NextRequest, { params }: { params: Params }) {
     if (password) {
       const passwordHash = await hashPassword(password);
       await prisma.authCredential.update({
-        where: { userId: params.id },
+        where: { userId: id },
         data: { passwordHash },
       });
     }
@@ -86,8 +88,9 @@ export async function PUT(req: NextRequest, { params }: { params: Params }) {
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: Params }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<Params> }) {
   try {
+    const { id } = await params;
     const authHeader = req.headers.get("authorization");
     const user = getUserFromAuthHeader(authHeader || undefined);
     if (!user) {
@@ -100,7 +103,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Params }) {
     }
 
     await prisma.user.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     return NextResponse.json({ success: true });

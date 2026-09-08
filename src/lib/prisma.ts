@@ -1,33 +1,18 @@
-type PrismaClientLike = any;
+import { PrismaClient } from "@prisma/client";
 
+// PrismaClient is attached to `globalThis` in development to avoid exhausting
+// the database connection pool during hot reloads.
 const globalForPrisma = globalThis as unknown as {
-  prisma?: PrismaClientLike;
+  prisma?: PrismaClient | undefined;
 };
 
-async function getPrismaClient(): Promise<PrismaClientLike> {
-  if (globalForPrisma.prisma) {
-    return globalForPrisma.prisma;
-  }
-
-  const mod = await import("@prisma/client");
-  const PrismaClient = (mod as any).PrismaClient ?? function PrismaClient() {
-    return {};
-  };
-
-  globalForPrisma.prisma = new PrismaClient({
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
     log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
   });
 
-  return globalForPrisma.prisma;
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
 }
 
-export const prisma = new Proxy({} as PrismaClientLike, {
-  get: (_, prop) => {
-    const clientPromise = getPrismaClient();
-    return Reflect.get(clientPromise, prop);
-  },
-  apply: (_, __, args) => {
-    const clientPromise = getPrismaClient();
-    return Reflect.apply(clientPromise as any, undefined, args);
-  },
-});
