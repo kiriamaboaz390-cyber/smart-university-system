@@ -247,4 +247,82 @@ Each sprint we will merge one small vertical slice from these tracks, run tests,
 - One Admin user can create a full semester timetable from CSVs (courses, lecturers, students, rooms) and a guided form (term dates, constraints).
 - Guided form walks Admin through: import CSVs → set business hours → define holidays → set exam windows → generate timetable → review conflicts → approve.
 
+## 11. Session handover — 2026-09-03 (QR attendance slice delivered)
+
+This section is the continuation point for the next human or AI session. It records where the
+project stands, how to run and verify it locally, and exactly what to do next and how.
+
+### 11.1 Where we are
+
+- `main` is at `f7c28f3` with a clean tree. Items 1–4 of §9.7 are DONE; item 5 is the next action.
+- The QR attendance slice (§9.7 item 4) is delivered and verified end to end:
+  - `71c8832` fix(platform): repaired the runtime-broken Prisma client (the old lazy proxy read
+    model delegates off a Promise, so every API route failed at runtime), adopted the Next 16
+    `params: Promise` convention in `term-config/[id]` and `users/[id]`, added migration
+    `20260903140358_sync_schema_drift` (migration history was missing 5 tables and several
+    columns), and stopped tracking the empty schema-only dev database.
+  - `f7c28f3` feat(qr): `src/lib/qr.ts` (payload build/parse + active-window validation) with TDD
+    suites in `scripts/run-tests.ts`; hardened `/api/qr/scan` (student identity and STUDENT role
+    from the verified JWT only, weekly time-window check with a 15-minute grace, audit actor
+    resolved via `LecturerProfile.userId`); `/api/qr/generate` lets lecturers generate codes for
+    their own sessions; student scanner page with jsQR camera decoding + manual entry fallback and
+    its CSS module; auth-context session restore fixed; `scripts/seed-dev.ts` added.
+- Verification evidence from that session: all 6 test suites pass, `tsc --noEmit` exits 0, eslint
+  clean on touched files, production build succeeds (`/student/scanner` prerendered), and a 14-check
+  curl flow against a live server passed (record/already_recorded, RBAC 401/403, 400/404/409 paths,
+  audit rows, room occupancy).
+
+### 11.2 How to run and verify (local environment)
+
+- Database is SQLite for now (`prisma/dev.db`, gitignored; Postgres is planned for later).
+  `.env` (untracked) holds `DATABASE_URL="file:./dev.db"` and a local `JWT_SECRET`. Never commit them.
+- Seed / re-seed demo data (idempotent): `npx tsx scripts/seed-dev.ts`
+  - It prints dev logins (password for all: `Password123!`): `admin@dev.local`,
+    `lecturer@dev.local`, `student@dev.local` — plus one ACTIVE session (today's weekday/hour)
+    with a ready-made QR payload, and one INACTIVE session for negative tests.
+- Run app: `npm run dev` (port 3000). Scanner page: `/student/scanner`.
+- Verification battery (all must be green before any commit):
+  1. `npx tsx scripts/run-tests.ts`
+  2. `npx tsc --noEmit`
+  3. `npx eslint .`
+  4. `npm run build`
+
+### 11.3 What to do next, in order
+
+1. Known bug fix (small, do first): `src/app/api/users/[id]/route.ts` selects and updates a
+   `fullName` field that does not exist on the `User` model (`firstName`/`lastName` are the real
+   columns), so those handlers 500 at runtime. Apply the smallest correct fix (derive
+   `fullName` from name columns in the response; only add a column if a decision requires it),
+   verify with `tsc --noEmit` plus a runtime call against the seeded DB, and record the decision
+   in the change log.
+2. §9.7 item 5 — the next feature task: extend `src/lib/timetable.ts` with more constraints and
+   tests, TDD style: add failing tests to `scripts/run-tests.ts` first, then implement. Candidate
+   constraints, per §10.3 and the schema: room capacity enforcement (strict, per §10.6),
+   contiguous-slot logic, student-group time conflicts, exam-window awareness (ExamWindow/Holiday
+   on TermConfig), and the weekly caps already modeled in `src/lib/scheduling.ts`
+   (`maxSessionsPerWeek`, `maxUnitsPerSemester`). Keep functions pure and unit-testable.
+3. If the stakeholder answers the open questions (§9.1: Q6 manual attendance marking, Q9 calendar
+   integrations, Q10 student schedule visibility; plus the LATE attendance-status policy raised by
+   the QR slice — scans currently always record `PRESENT`), implement the answers; otherwise leave
+   the questions listed.
+4. Later, per the stakeholder's decision: move dev persistence from SQLite to Postgres (provider
+   change + new migration; do not attempt until explicitly asked).
+
+### 11.4 Rules every session must observe
+
+- TDD with evidence: failing test → pass → refactor; every completion claim backed by a fresh
+  command result (§5, §9.4).
+- No secrets or credentials in the repository (§9.3); `.env` stays untracked.
+- No destructive DB migrations without explicit approval; additive migrations on the dev SQLite DB
+  are acceptable when documented in the change log (§9.3).
+- Explicit RBAC and auditability: every new endpoint checks roles via `src/lib/rbac.ts`
+  (`getUserFromAuthHeader` + `hasRole`) and writes state changes to `prisma.auditLog` (§5, §9.4).
+- Modular services, Prisma schema as the single source of truth, migrations via Prisma Migrate.
+- Next.js 16 conventions: read the relevant guide in `node_modules/next/dist/docs/` before writing
+  code (see AGENTS.md); route handlers destructure `params` as a Promise.
+- Use only libraries already in `package.json` unless the stakeholder approves a new dependency.
+- Commits: atomic, Conventional Commits on `main` (`feat:`, `fix:`, `docs:`, `test:`, `chore:`);
+  update this document (§6 status, §8 change log, §11 handover) whenever status changes (§9.6).
+
+This document should be updated whenever architecture, constraints, or implementation status changes.
 This document should be updated whenever architecture, constraints, or implementation status changes.
