@@ -69,17 +69,20 @@ These are design constraints we are intentionally not solving in the initial bui
 - initial design direction and requirements are captured
 - scheduling logic for room conflicts and timetable generation is being created with tests
 - project documentation is in place
+- auth scaffold (email/password + JWT) with RBAC middleware and role-gated API routes
+- room availability API, CSV import endpoints, term configuration admin UI, lecturer dashboard
+- QR attendance slice (Task 4 of §9.7): shared payload/active-window lib (`src/lib/qr.ts`) with tests, `/api/qr/generate`, hardened `/api/qr/scan` (JWT-derived student identity, STUDENT role check, active time window with 15-minute grace, corrected audit actor), student scanner page with camera scanning (jsQR) plus manual entry fallback
+- SQLite local dev environment with a synced migration history and seeded demo data (`scripts/seed-dev.ts`)
 
 ### In progress
-- timetable engine with semester and exam conflict handling
-- room allocation and deallocation logic
-- QR attendance payload design
-- dashboard and role-based view shell
+- timetable engine with semester and exam conflict handling (more constraints + tests pending, §9.7 item 5)
+- student-facing views beyond the scanner (timetable, room visibility)
+- notifications (in-app + email)
 
 ### Planned next
-- add persistence layer with Prisma and Postgres
-- add authentication and role gating
-- add admin workflows and campus/room management
+- extend `src/lib/timetable.ts` with more constraints and add tests (next immediate action)
+- migrate dev persistence from SQLite to Postgres when the team is ready
+- add admin workflows for campus/room management
 - expose end-to-end lesson attendance and timetable editing flows
 
 ## 7. Technical design notes
@@ -104,6 +107,8 @@ The prototype uses a practical rule set:
 - 2026-08-30: requirements clarified with six discovery questions
 - 2026-08-30: documented project context, constraints, and engineering principles
 - 2026-08-30: TDD workflow started with failing scheduling tests
+- 2026-09-03: QR attendance slice delivered (§9.7 item 4): `src/lib/qr.ts` (build/parse/active-window) with TDD tests, hardened `/api/qr/scan` (JWT-derived identity, role checks, time-window validation, audit actor fix), lecturer-owned QR generation in `/api/qr/generate`, student scanner page with jsQR camera scanning + manual entry + missing CSS module added, auth-context session restore fixed
+- 2026-09-03: platform fixes required by the slice: broken lazy Prisma proxy replaced with the canonical generated client (every Prisma route was failing at runtime), Next 16 `params: Promise` convention applied to `term-config/[id]` and `users/[id]` routes, schema drift resolved via migration `20260903140358_sync_schema_drift`, SQLite dev environment + seed script, `JWT_SECRET` now required locally
 
 This document should be updated whenever architecture, constraints, or implementation status changes.
 
@@ -188,10 +193,10 @@ Each sprint we will merge one small vertical slice from these tracks, run tests,
 - Enforce via CI: `pre-merge` checks for lint, tests, schema drift, and commit message linting.
 
 ### 9.7 Next immediate actions (I'll perform after your answers)
-1. Run the test suite and report failures.  
-2. Add a baseline `auth` scaffold (email/password + invite) and RBAC middleware.  
-3. Persist `findAvailableRooms` to Prisma and implement CSV import endpoints for `rooms` and `users`.  
-4. Implement QR generation endpoint and a simple scanner page that writes `AttendanceRecord` entries.  
+1. Run the test suite and report failures. (done 2026-09-03)  
+2. Add a baseline `auth` scaffold (email/password + invite) and RBAC middleware. (done)  
+3. Persist `findAvailableRooms` to Prisma and implement CSV import endpoints for `rooms` and `users`. (done)  
+4. Implement QR generation endpoint and a simple scanner page that writes `AttendanceRecord` entries. (done 2026-09-03 — see change log)  
 5. Extend `src/lib/timetable.ts` with more constraints and add tests.
 
 

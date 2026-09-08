@@ -4,6 +4,7 @@ import { canAccess, Role } from "../src/lib/access-control";
 import { findAvailableRooms, createSessionToken } from "../src/lib/room-operations";
 import { allocateRoom, checkForScheduleConflict, generateSemesterTimetable, generateExamTimetable } from "../src/lib/timetable";
 import { validateScheduleChangeRequest, validateWeeklySessionCap, validateUnitsPerSemester } from "../src/lib/scheduling";
+import { buildSessionQrPayload, parseQrPayload, isSessionActiveNow } from "../src/lib/qr";
 
 function runAccessControlTests() {
   console.log("Running access-control tests...");
@@ -155,12 +156,149 @@ function runSchedulingTests() {
   console.log("scheduling constraints: OK");
 }
 
+function runQrPayloadTests() {
+  console.log("Running QR payload tests...");
+
+  // build: room code preferred, deterministic format
+  const payload = buildSessionQrPayload({
+    sessionId: "sess-1",
+    roomId: "room-9",
+    roomCode: "R-204",
+    lecturerId: "lec-3",
+    startTime: 9,
+    endTime: 11,
+  });
+  assert.equal(
+    payload,
+    "smart-university:session=sess-1;room=R-204;lecturer=lec-3;start=9;end=11"
+  );
+
+  // build: falls back to room id when no code
+  const payloadNoCode = buildSessionQrPayload({
+    sessionId: "sess-1",
+    roomId: "room-9",
+    lecturerId: "lec-3",
+    startTime: 9,
+    endTime: 11,
+  });
+  assert.equal(
+    payloadNoCode,
+    "smart-university:session=sess-1;room=room-9;lecturer=lec-3;start=9;end=11"
+  );
+
+  // parse: round-trip
+  const parsed = parseQrPayload(payload);
+  assert.ok(parsed, "parseQrPayload should parse a built payload");
+  assert.equal(parsed?.session, "sess-1");
+  assert.equal(parsed?.room, "R-204");
+  assert.equal(parsed?.lecturer, "lec-3");
+  assert.equal(parsed?.start, "9");
+  assert.equal(parsed?.end, "11");
+
+  // parse: prefix optional and whitespace tolerated
+  const parsedLenient = parseQrPayload("  session=abc;room=R-1  ");
+  assert.ok(parsedLenient, "prefix is optional");
+  assert.equal(parsedLenient?.session, "abc");
+  assert.equal(parsedLenient?.room, "R-1");
+
+  // parse: value containing '=' keeps everything after the first '='
+  const parsedEquals = parseQrPayload("session=abc==;room=R-1");
+  assert.equal(parsedEquals?.session, "abc==");
+
+  // parse: dashboard-style payload (no prefix, no start/end)
+  const parsedDashboard = parseQrPayload("session=s1;lecturer=user-1;room=R-1");
+  assert.ok(parsedDashboard, "dashboard-style payload should parse");
+  assert.equal(parsedDashboard?.session, "s1");
+  assert.equal(parsedDashboard?.lecturer, "user-1");
+
+  // parse: invalid payloads rejected
+  assert.equal(parseQrPayload("garbage"), null, "no key=value pairs");
+  assert.equal(parseQrPayload("smart-university:"), null, "prefix only");
+  assert.equal(parseQrPayload("room=R-1"), null, "missing session key");
+  assert.equal(parseQrPayload("session="), null, "empty session value");
+  assert.equal(parseQrPayload(""), null, "empty string");
+
+  console.log("QR payload: OK");
+}
+
+function runQrActiveWindowTests() {
+  console.log("Running QR active window tests...");
+
+  // 2026-09-07 is a Monday (UTC).
+  const mondayMorning = new Date("2026-09-07T09:30:00Z"); // Mon 09:30 UTC
+  assert.equal(
+    isSessionActiveNow({ day: "Mon", startTime: 9, endTime: 11 }, mondayMorning),
+    true,
+    "within the session window"
+  );
+  assert.equal(
+    isSessionActiveNow({ day: "Mon", startTime: 9, endTime: 12 }, mondayMorning),
+    true,
+    "session spans current time"
+  );
+  assert.equal(
+    isSessionActiveNow({ day: "Tue", startTime: 9, endTime: 11 }, mondayMorning),
+    false,
+    "wrong day"
+  );
+  assert.equal(
+    isSessionActiveNow({ day: "Mon", startTime: 12, endTime: 14 }, mondayMorning),
+    false,
+    "before start"
+  );
+  assert.equal(
+    isSessionActiveNow({ day: "Funday", startTime: 9, endTime: 11 }, mondayMorning),
+    false,
+    "unknown day name"
+  );
+
+  const rightAfterStart = new Date("2026-09-07T09:00:00Z");
+  assert.equal(
+    isSessionActiveNow({ day: "Mon", startTime: 9, endTime: 11 }, rightAfterStart),
+    true,
+    "exact start boundary accepted"
+  );
+
+  const justBeforeStart = new Date("2026-09-07T08:59:00Z");
+  assert.equal(
+    isSessionActiveNow({ day: "Mon", startTime: 9, endTime: 11 }, justBeforeStart),
+    false,
+    "one minute before start rejected"
+  );
+
+  // grace: up to 15 minutes after the end time is still accepted
+  const withinGrace = new Date("2026-09-07T11:15:00Z");
+  assert.equal(
+    isSessionActiveNow({ day: "Mon", startTime: 9, endTime: 11 }, withinGrace),
+    true,
+    "within 15-minute grace after end"
+  );
+
+  const outsideGrace = new Date("2026-09-07T11:16:00Z");
+  assert.equal(
+    isSessionActiveNow({ day: "Mon", startTime: 9, endTime: 11 }, outsideGrace),
+    false,
+    "beyond 15-minute grace after end"
+  );
+
+  // custom grace of 0 disables late scans
+  assert.equal(
+    isSessionActiveNow({ day: "Mon", startTime: 9, endTime: 11 }, withinGrace, 0),
+    false,
+    "grace of 0 rejects post-end scans"
+  );
+
+  console.log("QR active window: OK");
+}
+
 async function main() {
   try {
     runAccessControlTests();
     runRoomOperationsTests();
     runTimetableTests();
     runSchedulingTests();
+    runQrPayloadTests();
+    runQrActiveWindowTests();
     console.log("\n✅ All tests passed.");
   } catch (e) {
     console.error("\n❌ Test failure:", e);
