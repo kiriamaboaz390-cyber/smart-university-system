@@ -20,12 +20,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<Params
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    // `User` has no `fullName` column — the real columns are `firstName`/`lastName`,
+    // so we select those and derive `fullName` for the response shape.
     const targetUser = await prisma.user.findUnique({
       where: { id },
       select: {
         id: true,
         email: true,
-        fullName: true,
+        firstName: true,
+        lastName: true,
         role: true,
       },
     });
@@ -34,7 +37,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<Params
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    return NextResponse.json(targetUser);
+    return NextResponse.json({
+      id: targetUser.id,
+      email: targetUser.email,
+      fullName: `${targetUser.firstName} ${targetUser.lastName}`.trim(),
+      role: targetUser.role,
+    });
   } catch (e) {
     console.error("Error fetching user:", e);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -55,10 +63,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<Params
     }
 
     const body = await req.json();
-    const { fullName, role, password } = body;
+    const { fullName, firstName, lastName, role, password } = body;
 
-    const updateData: any = {};
-    if (fullName) updateData.fullName = fullName;
+    // `fullName` is not a column: accept it and split into the real columns
+    // (`firstName`/`lastName`), or take explicit names when provided.
+    const updateData: { firstName?: string; lastName?: string; role?: string } = {};
+    if (fullName) {
+      const [first, ...rest] = String(fullName).trim().split(/\s+/);
+      if (first) updateData.firstName = first;
+      if (rest.length > 0) updateData.lastName = rest.join(" ");
+    }
+    if (firstName) updateData.firstName = String(firstName).trim();
+    if (lastName) updateData.lastName = String(lastName).trim();
     if (role) updateData.role = role;
 
     const updatedUser = await prisma.user.update({
@@ -67,7 +83,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<Params
       select: {
         id: true,
         email: true,
-        fullName: true,
+        firstName: true,
+        lastName: true,
         role: true,
       },
     });
@@ -81,7 +98,22 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<Params
       });
     }
 
-    return NextResponse.json(updatedUser);
+    await prisma.auditLog.create({
+      data: {
+        actorId: user.userId,
+        action: "USER_UPDATED",
+        entityType: "User",
+        entityId: id,
+        details: JSON.stringify({ fields: Object.keys(updateData) }),
+      },
+    });
+
+    return NextResponse.json({
+      id: updatedUser.id,
+      email: updatedUser.email,
+      fullName: `${updatedUser.firstName} ${updatedUser.lastName}`.trim(),
+      role: updatedUser.role,
+    });
   } catch (e) {
     console.error("Error updating user:", e);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
