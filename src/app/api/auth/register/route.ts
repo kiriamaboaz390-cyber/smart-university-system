@@ -11,8 +11,8 @@ export async function POST(req: Request) {
 
     const user = await registerUser({ email, firstName, lastName, password, role });
     return NextResponse.json({ user });
-  } catch (err: any) {
-    const code = err?.message || "error";
+  } catch (err) {
+    const code = err instanceof Error ? err.message : "error";
     return NextResponse.json({ error: code }, { status: 400 });
   }
 }

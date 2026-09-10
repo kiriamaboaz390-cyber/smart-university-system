@@ -51,12 +51,12 @@ export default function TermConfigPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (user && !["ADMIN", "SUPER_ADMIN"].includes(user.role)) {
-      setError("You do not have permission to access this page");
-      return;
-    }
-  }, [user]);
+  // Permission check is derived during render instead of an effect so the
+  // message updates with `user` without a cascading render.
+  const permissionError =
+    user && !["ADMIN", "SUPER_ADMIN"].includes(user.role)
+      ? "You do not have permission to access this page"
+      : null;
 
   useEffect(() => {
     if (!token) return;
@@ -68,20 +68,33 @@ export default function TermConfigPage() {
         });
 
         if (!res.ok) throw new Error("Failed to fetch term configs");
-        const data = await res.json();
-        setConfigs(data.map((c: any) => ({
+        const data: Array<{
+          id: string;
+          termName: string;
+          startDate: string;
+          endDate: string;
+          businessHourStart: number;
+          businessHourEnd: number;
+          maxSessionsPerWeek: number;
+          maxUnitsPerSemester: number;
+          holidays: Array<{ id?: string; name: string; date: string; endDate: string | null }>;
+          examWindows: Array<{ id?: string; name: string; examStartDate: string; examEndDate: string }>;
+        }> = await res.json();
+        setConfigs(data.map((c) => ({
           ...c,
           startDate: new Date(c.startDate).toISOString().split("T")[0],
           endDate: new Date(c.endDate).toISOString().split("T")[0],
-          holidays: c.holidays.map((h: any) => ({
-            ...h,
-            startDate: new Date(h.startDate).toISOString().split("T")[0],
-            endDate: new Date(h.endDate).toISOString().split("T")[0],
+          holidays: c.holidays.map((h) => ({
+            id: h.id,
+            name: h.name,
+            startDate: new Date(h.date).toISOString().split("T")[0],
+            endDate: new Date(h.endDate ?? h.date).toISOString().split("T")[0],
           })),
-          examWindows: c.examWindows.map((e: any) => ({
-            ...e,
-            startDate: new Date(e.startDate).toISOString().split("T")[0],
-            endDate: new Date(e.endDate).toISOString().split("T")[0],
+          examWindows: c.examWindows.map((e) => ({
+            id: e.id,
+            name: e.name,
+            startDate: new Date(e.examStartDate).toISOString().split("T")[0],
+            endDate: new Date(e.examEndDate).toISOString().split("T")[0],
           })),
         })));
       } catch (err) {
@@ -185,8 +198,8 @@ export default function TermConfigPage() {
     }
   };
 
-  if (error && error.includes("permission")) {
-    return <div className={styles.error}>{error}</div>;
+  if (permissionError) {
+    return <div className={styles.error}>{permissionError}</div>;
   }
 
   return (

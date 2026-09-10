@@ -78,8 +78,8 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ status: "recorded", record });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "error" }, { status: 500 });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "error" }, { status: 500 });
   }
 }
 

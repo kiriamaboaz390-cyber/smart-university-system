@@ -2,6 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromAuthHeader, hasRole } from "@/lib/rbac";
 
+// Client sends startDate/endDate; the schema columns are
+// (Holiday: date/endDate; ExamWindow: examStartDate/examEndDate).
+interface HolidayInput {
+  name: string;
+  startDate: string;
+  endDate: string;
+}
+
+interface ExamWindowInput {
+  name: string;
+  startDate: string;
+  endDate: string;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const authHeader = req.headers.get("authorization");
@@ -64,6 +78,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const holidayRows: HolidayInput[] = Array.isArray(holidays) ? holidays : [];
+    const examWindowRows: ExamWindowInput[] = Array.isArray(examWindows) ? examWindows : [];
+
     const termConfig = await prisma.termConfig.create({
       data: {
         termName,
@@ -74,21 +91,21 @@ export async function POST(req: NextRequest) {
         maxSessionsPerWeek: maxSessionsPerWeek || 18,
         maxUnitsPerSemester: maxUnitsPerSemester || 8,
         campusId,
-        holidays: holidays
+        holidays: holidayRows.length > 0
           ? {
-              create: holidays.map((h: any) => ({
+              create: holidayRows.map((h) => ({
                 name: h.name,
-                startDate: new Date(h.startDate),
+                date: new Date(h.startDate),
                 endDate: new Date(h.endDate),
               })),
             }
           : undefined,
-        examWindows: examWindows
+        examWindows: examWindowRows.length > 0
           ? {
-              create: examWindows.map((e: any) => ({
+              create: examWindowRows.map((e) => ({
                 name: e.name,
-                startDate: new Date(e.startDate),
-                endDate: new Date(e.endDate),
+                examStartDate: new Date(e.startDate),
+                examEndDate: new Date(e.endDate),
               })),
             }
           : undefined,

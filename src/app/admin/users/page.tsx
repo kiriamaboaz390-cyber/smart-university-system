@@ -25,13 +25,11 @@ export default function UsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Check authorization
-  useEffect(() => {
-    if (user && !["HR_ADMIN", "SUPER_ADMIN"].includes(user.role)) {
-      setError("You do not have permission to access this page");
-      return;
-    }
-  }, [user]);
+  // Check authorization (derived, not set in an effect)
+  const permissionError =
+    user && !["HR_ADMIN", "SUPER_ADMIN"].includes(user.role)
+      ? "You do not have permission to access this page"
+      : null;
 
   // Fetch users
   useEffect(() => {
@@ -91,8 +89,8 @@ export default function UsersPage() {
     }
   };
 
-  if (error && error.includes("permission")) {
-    return <div className={styles.error}>{error}</div>;
+  if (permissionError) {
+    return <div className={styles.error}>{permissionError}</div>;
   }
 
   return (

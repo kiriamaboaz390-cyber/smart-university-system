@@ -21,7 +21,7 @@ export function verifyJwt(token: string) {
   try {
     const secret = process.env.JWT_SECRET || "dev-jwt-secret";
     return jwt.verify(token, secret) as JwtPayload;
-  } catch (e) {
+  } catch {
     return null;
   }
 }

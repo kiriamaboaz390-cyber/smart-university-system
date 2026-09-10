@@ -63,41 +63,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Restore an existing session on first load. The stored user object is the
   // source of truth; if it is missing we reconstruct a minimal user (id + role)
-  // from the JWT payload so pages keep working after a refresh.
+  // from the JWT payload so pages keep working after a refresh. State updates
+  // happen inside a microtask callback (not synchronously in the effect body)
+  // to avoid cascading renders on mount.
   useEffect(() => {
-    const storedToken = localStorage.getItem(AUTH_TOKEN_KEY);
-    if (storedToken) {
-      setToken(storedToken);
-      try {
-        const payload = JSON.parse(atob(storedToken.split(".")[1]));
+    Promise.resolve().then(() => {
+      const storedToken = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (storedToken) {
+        setToken(storedToken);
+        try {
+          const payload = JSON.parse(atob(storedToken.split(".")[1]));
 
-        let restored: User | null = null;
-        const storedUser = localStorage.getItem(AUTH_USER_KEY);
-        if (storedUser) {
-          try {
-            restored = normalizeUser(JSON.parse(storedUser));
-          } catch {
-            restored = null;
+          let restored: User | null = null;
+          const storedUser = localStorage.getItem(AUTH_USER_KEY);
+          if (storedUser) {
+            try {
+              restored = normalizeUser(JSON.parse(storedUser));
+            } catch {
+              restored = null;
+            }
           }
-        }
-        if (!restored && payload && typeof payload === "object") {
-          restored = normalizeUser({ id: payload.userId, role: payload.role });
-        }
+          if (!restored && payload && typeof payload === "object") {
+            restored = normalizeUser({ id: payload.userId, role: payload.role });
+          }
 
-        if (restored) {
-          setUser(restored);
-        } else {
+          if (restored) {
+            setUser(restored);
+          } else {
+            localStorage.removeItem(AUTH_TOKEN_KEY);
+            localStorage.removeItem(AUTH_USER_KEY);
+            setToken(null);
+          }
+        } catch {
           localStorage.removeItem(AUTH_TOKEN_KEY);
           localStorage.removeItem(AUTH_USER_KEY);
           setToken(null);
         }
-      } catch {
-        localStorage.removeItem(AUTH_TOKEN_KEY);
-        localStorage.removeItem(AUTH_USER_KEY);
-        setToken(null);
       }
-    }
-    setLoading(false);
+      setLoading(false);
+    });
   }, []);
 
   const login = async (email: string, password: string) => {

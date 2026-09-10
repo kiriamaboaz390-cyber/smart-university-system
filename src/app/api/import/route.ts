@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { Course, LecturerProfile, Room, Session, StudentProfile, User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getUserFromAuthHeader, hasRole } from "@/lib/rbac";
 
@@ -15,7 +16,7 @@ function parseCsv(csv: string) {
 }
 
 async function importUsers(rows: Record<string, string>[]) {
-  const created: any[] = [];
+  const created: User[] = [];
   for (const r of rows) {
     const email = r.email;
     if (!email) continue;
@@ -38,7 +39,7 @@ async function importUsers(rows: Record<string, string>[]) {
 }
 
 async function importStudents(rows: Record<string, string>[]) {
-  const created: any[] = [];
+  const created: StudentProfile[] = [];
   for (const r of rows) {
     const userEmail = r.userEmail;
     if (!userEmail) continue;
@@ -58,7 +59,7 @@ async function importStudents(rows: Record<string, string>[]) {
 }
 
 async function importLecturers(rows: Record<string, string>[]) {
-  const created: any[] = [];
+  const created: LecturerProfile[] = [];
   for (const r of rows) {
     const userEmail = r.userEmail;
     if (!userEmail) continue;
@@ -77,7 +78,7 @@ async function importLecturers(rows: Record<string, string>[]) {
 }
 
 async function importRooms(rows: Record<string, string>[]) {
-  const created: any[] = [];
+  const created: Room[] = [];
   // ensure default campus exists
   let campus = await prisma.campus.findUnique({ where: { code: "DEFAULT" } });
   if (!campus) {
@@ -110,7 +111,7 @@ async function importRooms(rows: Record<string, string>[]) {
 }
 
 async function importCourses(rows: Record<string, string>[]) {
-  const created: any[] = [];
+  const created: Course[] = [];
   for (const r of rows) {
     const code = r.code; if (!code) continue;
     const existing = await prisma.course.findUnique({ where: { code } });
@@ -127,7 +128,7 @@ async function importCourses(rows: Record<string, string>[]) {
 }
 
 async function importSessions(rows: Record<string, string>[]) {
-  const created: any[] = [];
+  const created: Session[] = [];
   for (const r of rows) {
     const courseCode = r.courseCode; if (!courseCode) continue;
     const course = await prisma.course.findUnique({ where: { code: courseCode } });
@@ -176,7 +177,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ imported: result.length, sample: result.slice(0, 5) });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "error" }, { status: 500 });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "error" }, { status: 500 });
   }
 }

@@ -43,12 +43,9 @@ export default function LecturerDashboard() {
     reason: "",
   });
 
-  useEffect(() => {
-    if (user && user.role !== "LECTURER") {
-      setError("Only lecturers can access this page");
-      return;
-    }
-  }, [user]);
+  // Permission check is derived during render instead of an effect.
+  const permissionError =
+    user && user.role !== "LECTURER" ? "Only lecturers can access this page" : null;
 
   useEffect(() => {
     if (!token) return;
@@ -173,8 +170,8 @@ export default function LecturerDashboard() {
     return `${hour.toString().padStart(2, "0")}:00`;
   };
 
-  if (error && error.includes("Only lecturers")) {
-    return <div className={styles.error}>{error}</div>;
+  if (permissionError) {
+    return <div className={styles.error}>{permissionError}</div>;
   }
 
   return (
