@@ -61,7 +61,7 @@ test("selects rooms respecting capacity when room objects provided", () => {
   ];
 
   const rooms = [ { id: "R-Large", capacity: 120 }, { id: "R-Small", capacity: 40 } ];
-  const timetable = generateSemesterTimetable(courses as any, rooms as any);
+  const timetable = generateSemesterTimetable(courses, rooms);
 
   assert.equal(timetable[0].roomId === "R-Large", true);
   assert.equal(timetable[1].roomId === "R-Small", true);
