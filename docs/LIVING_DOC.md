@@ -109,7 +109,10 @@ The prototype uses a practical rule set:
 - 2026-08-30: TDD workflow started with failing scheduling tests
 - 2026-09-03: QR attendance slice delivered (§9.7 item 4): `src/lib/qr.ts` (build/parse/active-window) with TDD tests, hardened `/api/qr/scan` (JWT-derived identity, role checks, time-window validation, audit actor fix), lecturer-owned QR generation in `/api/qr/generate`, student scanner page with jsQR camera scanning + manual entry + missing CSS module added, auth-context session restore fixed
 - 2026-09-03: platform fixes required by the slice: broken lazy Prisma proxy replaced with the canonical generated client (every Prisma route was failing at runtime), Next 16 `params: Promise` convention applied to `term-config/[id]` and `users/[id]` routes, schema drift resolved via migration `20260903140358_sync_schema_drift`, SQLite dev environment + seed script, `JWT_SECRET` now required locally
-- 2026-09-09: BUG FIX (§11.3 item 1): `fullName` does not exist on the `User` model (real columns `firstName`/`lastName`), so all four user-management handlers 500'd at runtime. Decision: no new column; the API keeps the `fullName` response shape by deriving it from the name columns. `users/[id]` GET selects `firstName`/`lastName` and derives `fullName`; PUT accepts `fullName` (split on whitespace) or explicit `firstName`/`lastName`, writes real columns, and adds the missing `prisma.auditLog` write (`USER_UPDATED`, actor from JWT `userId`). Same latent bug fixed in `users` GET (derive per user) and POST (split `fullName` into columns on create). RBAC unchanged (`HR_ADMIN`/`SUPER_ADMIN`; DELETE `SUPER_ADMIN` only). Verified live: `tsc --noEmit` exit 0, eslint clean, `tsc --noEmit` exit 0, eslint exit 0, 6/6 suites pass, and a live curl flow against `npm run dev` + seeded SQLite DB (dev admin temporarily elevated to `HR_ADMIN` then restored to `ADMIN`; RBAC 401/403 paths observed): GET 200 with derived `fullName`, PUT via `fullName` and via explicit names both 200, audit rows confirmed, unauthenticated GET 401. NOTE: seed only creates `ADMIN`, but user-management routes require `HR_ADMIN`/`SUPER_ADMIN` — surfaced by this verification; seed roles may need a follow-up decision.
+- 2026-09-09: BUG FIX (§11.3 item 1): `fullName` does not exist on the `User` model (real columns `firstName`/`lastName`), so all four user-management handlers 500'd at runtime. Decision: no new column; the API keeps the `fullName` response shape by deriving it from the name columns. `users/[id]` GET selects `firstName`/`lastName` and derives `fullName`; PUT accepts `fullName` (split on whitespace) or explicit `firstName`/`lastName`, writes real columns, and adds the missing `prisma.auditLog` write (`USER_UPDATED`, actor from JWT `userId`). Same latent bug fixed in `users` GET (derive per user) and POST (split `fullName` into columns on create). RBAC unchanged (`HR_ADMIN`/`SUPER_ADMIN`; DELETE `SUPER_ADMIN` only). Verified live: `tsc --noEmit` exit 0, eslint clean, 6/6 suites pass, and a live curl flow against `npm run dev` + seeded SQLite DB (dev admin temporarily elevated to `HR_ADMIN` then restored to `ADMIN`; RBAC 401/403 paths observed): GET 200 with derived `fullName`, PUT via `fullName` and via explicit names both 200, audit rows confirmed, unauthenticated GET 401. NOTE: seed only creates `ADMIN`, but user-management routes require `HR_ADMIN`/`SUPER_ADMIN` — surfaced by this verification; seed roles may need a follow-up decision.
+- 2026-09-09: chore(lint): all 43 pre-existing eslint errors cleared (`npx eslint .` now exit 0; one pre-existing `<img>` warning in qr-panel remains, intentional). `catch (e: any)` → `instanceof Error` extraction; CSV import arrays typed with real Prisma model types (shim now re-exports generated model result types); term-config POST/GET fixed to real schema columns (`Holiday.date`, `ExamWindow.examStartDate`) — this also fixes a latent 500 when the admin form submits nested holiday/exam-window rows; the three permission-gate `setState`-in-effect violations replaced with render-derived `permissionError` (admin users, admin term-config, lecturer dashboard); auth-context session restore moved into a microtask callback; `types/prisma-shim.d.ts` keeps loose typing behind a documented eslint-disable — deleting it outright surfaces 13 pre-existing type errors in the lecturer routes (`requestType` missing on create, `proposedRoom`/`sessionDate` not in include/orderBy), recorded below as follow-up work.
+- 2026-09-09: §9.7 item 5 DELIVERED with strict TDD. RED evidence: `❌ TypeError: checkRoomCapacity is not a function` (run-tests exit 1). GREEN: 9/9 suites pass. New pure functions in `src/lib/timetable.ts`: `checkRoomCapacity` (strict — fits only when `studentCount <= Room.capacity`, §10.6), `findContiguousBlock` (earliest free N-hour block inside business hours; adjacent bookings never split contiguity), `checkGroupTimeConflict` (student-group overlap, surfaces `conflictingId`), `isDateInExamWindows` / `isDateOnHoliday` / `isDateSchedulable` (ExamWindow + single/multi-day Holiday on TermConfig; regular sessions blocked with `reason: "exam_window"` | `"holiday"`), `validateWeeklyCaps` (reuses `maxSessionsPerWeek`/`maxUnitsPerSemester` policy from `src/lib/scheduling.ts`; per-group weekly session count + unique-course credits). `generateSemesterTimetable` room selection now typed via `RoomLike` instead of `any`. Decision: constraint functions stay pure/unit-testable; they are exported for API-layer composition — wiring them into the session-creation endpoints is follow-up work.
+- OPEN QUESTIONS (§9.1): Q6 manual attendance marking, Q9 calendar integrations, Q10 student schedule visibility, and the LATE attendance-status policy (QR scans currently always record `PRESENT`; `isSessionActiveNow` already supports a grace window) — still unanswered by the stakeholder, therefore NOT implemented. SQLite remains the dev database; no Postgres migration attempted.
 
 This document should be updated whenever architecture, constraints, or implementation status changes.
 
@@ -290,22 +293,21 @@ project stands, how to run and verify it locally, and exactly what to do next an
 
 ### 11.3 What to do next, in order
 
-1. Known bug fix (small, do first): `src/app/api/users/[id]/route.ts` selects and updates a
-   `fullName` field that does not exist on the `User` model (`firstName`/`lastName` are the real
-   columns), so those handlers 500 at runtime. Apply the smallest correct fix (derive
-   `fullName` from name columns in the response; only add a column if a decision requires it),
-   verify with `tsc --noEmit` plus a runtime call against the seeded DB, and record the decision
-   in the change log.
-2. §9.7 item 5 — the next feature task: extend `src/lib/timetable.ts` with more constraints and
-   tests, TDD style: add failing tests to `scripts/run-tests.ts` first, then implement. Candidate
-   constraints, per §10.3 and the schema: room capacity enforcement (strict, per §10.6),
-   contiguous-slot logic, student-group time conflicts, exam-window awareness (ExamWindow/Holiday
-   on TermConfig), and the weekly caps already modeled in `src/lib/scheduling.ts`
-   (`maxSessionsPerWeek`, `maxUnitsPerSemester`). Keep functions pure and unit-testable.
-3. If the stakeholder answers the open questions (§9.1: Q6 manual attendance marking, Q9 calendar
+1. Wire the new timetable constraints into the API layer: the pure functions from
+   `src/lib/timetable.ts` (`checkRoomCapacity`, `findContiguousBlock`, `checkGroupTimeConflict`,
+   `isDateSchedulable`, `validateWeeklyCaps`) are delivered and unit-tested, but no endpoint calls
+   them yet. Compose them into the session/booking creation and change-request endpoints with
+   explicit RBAC (`src/lib/rbac.ts`) and `prisma.auditLog` writes (§11.4). TDD again: extend
+   `scripts/run-tests.ts` first.
+2. If the stakeholder answers the open questions (§9.1: Q6 manual attendance marking, Q9 calendar
    integrations, Q10 student schedule visibility; plus the LATE attendance-status policy raised by
-   the QR slice — scans currently always record `PRESENT`), implement the answers; otherwise leave
-   the questions listed.
+   the QR slice — scans currently always record `PRESENT`), implement the answers; the questions
+   are listed as open in §8 (2026-09-09 entry).
+3. Fix the 13 pre-existing type errors surfaced by deleting `types/prisma-shim.d.ts` in the
+   lecturer routes (`schedule-change-requests`: missing `requestType` on create; `proposedRoom`
+   not in include; `sessions`: `sessionDate` not in orderBy) and the seed-vs-RBAC mismatch
+   (seeded admin is `ADMIN` but user-management routes require `HR_ADMIN`/`SUPER_ADMIN`), then
+   delete the shim so the real generated client types are used everywhere.
 4. Later, per the stakeholder's decision: move dev persistence from SQLite to Postgres (provider
    change + new migration; do not attempt until explicitly asked).
 
